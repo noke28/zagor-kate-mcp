@@ -1,9 +1,11 @@
 name = "zagor-kate-mcp"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 GITHUB_REPO = "noke28/zagor-duh-zime"
+ENABLE_PMC_WRITES = "false"
 
 # Secrets to configure in Cloudflare:
 # wrangler secret put MCP_API_KEY

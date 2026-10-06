@@ -1,9 +1,14 @@
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+
 export interface Env {
   MCP_API_KEY: string;
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   DOCMOST_URL: string;
   DOCMOST_API_KEY: string;
+  ENABLE_PMC_WRITES?: string;
 }
 
 const AUTHORITY = {
@@ -139,6 +144,13 @@ async function searchCode(env: Env, query: string): Promise<any[]> {
 }
 
 async function callTool(env: Env, name: string, args: any): Promise<any> {
+  const tool = TOOLS.find(tool => tool.name === name);
+  if (!tool) throw new Error("Unknown tool");
+  if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Invalid arguments");
+  const schema = tool.inputSchema as any;
+  for (const key of schema.required || []) {
+    if (typeof args[key] !== "string" || !args[key].trim()) throw new Error(`Missing or invalid ${key}`);
+  }
   switch (name) {
     case "get_ustav":
       return { path: AUTHORITY.ustav, content: await ghFileContent(env, AUTHORITY.ustav) };
@@ -156,8 +168,8 @@ async function callTool(env: Env, name: string, args: any): Promise<any> {
       const raw = await searchCode(env, args.query);
       const scope = String(args.scope || "").trim().toLowerCase();
       const allowed = raw.filter((item: any) => {
-        if (!scope) return item.path.startsWith("authority/") || item.path.startsWith("kate/procedures/");
-        return item.path.toLowerCase().includes(scope);
+        const inSources = item.path.startsWith("authority/") || item.path.startsWith("kate/procedures/");
+        return inSources && (!scope || item.path.toLowerCase().includes(scope));
       });
       return { matches: allowed };
     }
@@ -183,6 +195,7 @@ async function callTool(env: Env, name: string, args: any): Promise<any> {
     }
 
     case "write_pmc": {
+      if (env.ENABLE_PMC_WRITES !== "true") throw new Error("PMC writes are disabled");
       if (args.scope !== "system") {
         throw new Error("MCP write_pmc only supports system scope; story PMC is handled by kate_worker.");
       }
@@ -231,6 +244,25 @@ export default {
     }
 
     try {
+      const origin = request.headers.get("Origin");
+      if (origin && origin !== url.origin) return json({ error: "Origin not allowed" }, 403);
+      if (url.pathname === "/mcp") {
+        const server = new Server({ name: "zagor-kate-mcp", version: "0.1.1" }, { capabilities: { tools: {} } });
+        server.setRequestHandler(ListToolsRequestSchema, async () => ({
+          tools: TOOLS.filter(tool => tool.name !== "write_pmc" || env.ENABLE_PMC_WRITES === "true") as any,
+        }));
+        server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
+          try {
+            const result = await callTool(env, params.name, params.arguments || {});
+            return { content: [{ type: "text", text: JSON.stringify(result) }] };
+          } catch {
+            return { isError: true, content: [{ type: "text", text: "Tool failed. Check tool arguments, source permissions and Worker configuration." }] };
+          }
+        });
+        const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+        await server.connect(transport);
+        return await transport.handleRequest(request);
+      }
       if (url.pathname === "/mcp/tools/list" && request.method === "GET") {
         return json({ tools: TOOLS });
       }
@@ -244,7 +276,7 @@ export default {
 
       return json({ success: false, error: "Not found" }, 404);
     } catch (e: any) {
-      return json({ success: false, error: e?.message || String(e) }, 500);
+      return json({ success: false, error: "Request failed. Check Worker configuration and source permissions." }, 500);
     }
   },
 };
