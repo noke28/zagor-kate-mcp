@@ -295,6 +295,10 @@ export async function fetchAuthorized(request: Request, env: Env, readOnly = fal
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (['/hq', '/hq/', '/hq/callback', '/hq/app.js'].includes(path)) {
+      const { hqResponse } = await import('./hq.ts');
+      return hqResponse(request)!;
+    }
     if (path === "/health") return legacyWorker.fetch(request, env);
     if (env.MCP_API_KEY && request.headers.get("Authorization") === `Bearer ${env.MCP_API_KEY}` && path.startsWith("/mcp")) {
       return legacyWorker.fetch(request, env);

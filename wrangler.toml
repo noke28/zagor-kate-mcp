@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
+[[rules]]
+type = "Text"
+globs = ["**/public/hq/*.html", "**/public/hq/*.js"]
+fallthrough = true
+
 [vars]
 GITHUB_REPO = "noke28/zagor-duh-zime"
 ENABLE_PMC_WRITES = "false"
