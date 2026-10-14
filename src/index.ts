@@ -301,7 +301,7 @@ export default {
     }
     if (path === "/health") return legacyWorker.fetch(request, env);
     if (env.MCP_API_KEY && request.headers.get("Authorization") === `Bearer ${env.MCP_API_KEY}` && path.startsWith("/mcp")) {
-      return legacyWorker.fetch(request, env);
+      return fetchAuthorized(request, env, true);
     }
     if (!env.OAUTH_KV) return legacyWorker.fetch(request, env);
     const { oauthWorker } = await import("./oauth.ts");
