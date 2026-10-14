@@ -1,14 +1,8 @@
-const origin = location.origin;
-const callback = `${origin}/hq/callback`;
-const resource = `${origin}/mcp`;
-const storageKey = 'zagor-hq-pkce';
 const el = id => document.getElementById(id);
 let token;
 let expiry = 0;
 let rpcId = 0;
 const lifecycle = new AbortController();
-const base64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
 function session(active) {
   for (const id of ['root', 'search-button', 'logout']) el(id).disabled = !active;
   el('login').disabled = active;
@@ -23,37 +17,15 @@ async function responseJson(response) {
   return response.json();
 }
 async function login() {
-  // Only PKCE transaction data survives the redirect. Access tokens stay in memory.
-  const client = await responseJson(await fetch('/oauth/register', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_name: 'ZAGOR HQ / KATE', redirect_uris: [callback], token_endpoint_auth_method: 'none', grant_types: ['authorization_code'], response_types: ['code'] }),
-  }));
-  if (typeof client.client_id !== 'string') throw new Error('Registracija klijenta nije završena.');
-  const verifier = random(); const state = random();
-  const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
-  sessionStorage.setItem(storageKey, JSON.stringify({ verifier, state, clientId: client.client_id, created: Date.now() }));
-  const params = new URLSearchParams({ client_id: client.client_id, redirect_uri: callback, response_type: 'code', scope: 'mcp:read', state, resource, code_challenge: challenge, code_challenge_method: 'S256' });
-  location.assign(`/authorize?${params}`);
-}
-async function finishLogin() {
-  if (location.pathname !== '/hq/callback') return;
-  const params = new URLSearchParams(location.search);
-  history.replaceState(null, '', '/hq');
-  const raw = sessionStorage.getItem(storageKey); sessionStorage.removeItem(storageKey);
-  if (!raw) throw new Error('Prijava nije pokrenuta u ovom prikazu.');
-  const tx = JSON.parse(raw);
-  if (params.get('state') !== tx.state || !Number.isFinite(tx.created) || Date.now() - tx.created > 15 * 60 * 1000 || Date.now() < tx.created) throw new Error('Prijava je istekla ili nije vezana za ovaj prikaz.');
-  if (params.has('error')) throw new Error('Prijava nije odobrena.');
-  if (params.get('iss') !== origin || !params.get('code')) throw new Error('Neispravan odgovor prijave.');
-  const result = await responseJson(await fetch('/oauth/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: tx.clientId, redirect_uri: callback, code: params.get('code'), code_verifier: tx.verifier, resource }) }));
-  if (typeof result.access_token !== 'string' || result.token_type?.toLowerCase() !== 'bearer' || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new Error('Prijava nije dala važeću sesiju.');
-  token = result.access_token; expiry = Date.now() + result.expires_in * 1000;
+  const key = el('bearer-key').value.trim();
+  el('bearer-key').value = '';
+  if (!key || /\s/.test(key)) throw new Error('Unesi važeći bearer ključ.');
+  token = key; expiry = Date.now() + 8 * 60 * 60 * 1000;
   session(true);
-  el('connection').textContent = 'Prijava završena. Provjeravam pristup alatima…';
-  await status();
+  try { await status(); } catch (error) { clearSession(); throw error; }
 }
 async function rpc(method, params = {}) {
-  if (!token || Date.now() >= expiry) { clearSession(); throw new Error('Poveži pristup preko GitHuba.'); }
+  if (!token || Date.now() >= expiry) { clearSession(); throw new Error('Unesi bearer ključ za pristup.'); }
   const activeToken = token;
   const response = await fetch('/mcp', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }) });
   if ([401, 403].includes(response.status)) clearSession();
@@ -119,7 +91,7 @@ el('root').addEventListener('click', () => showError(root));
 el('search').addEventListener('submit', event => { event.preventDefault(); void showError(() => search({ query: el('query').value }), 'search-status'); });
 window.addEventListener('pagehide', () => { lifecycle.abort(); clearSession(); });
 session(false);
-await showError(finishLogin);
+if (location.pathname === '/hq/callback') history.replaceState(null, '', '/hq');
 if (document.modelContext?.registerTool) {
   const noArgs = { type: 'object', properties: {}, additionalProperties: false };
   const definitions = [
