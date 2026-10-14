@@ -1,7 +1,7 @@
 import html from '../public/hq/index.html';
 import script from '../public/hq/app.js';
 
-// Public shell only. All source reads still pass through the OAuth MCP handler.
+// Public shell only. All source reads require authenticated MCP access; the HQ uses a bearer key.
 export function hqResponse(request: Request): Response | undefined {
   const path = new URL(request.url).pathname;
   if (!['/hq', '/hq/', '/hq/callback', '/hq/app.js'].includes(path)) return;
