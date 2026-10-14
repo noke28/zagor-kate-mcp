@@ -21,3 +21,14 @@ id = "8d45f6910d1941a2af4fa3dd619f2c62"
 # GitHub OAuth app credentials (separate from the source-read GITHUB_TOKEN):
 # wrangler secret put OAUTH_GITHUB_CLIENT_ID
 # wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+# Keep request URL logging off in source configuration to avoid recording OAuth
+# callback query parameters. Diagnostic invocation logs may be enabled through
+# the API only together with observability.redact_query_string = true.
+invocation_logs = false
