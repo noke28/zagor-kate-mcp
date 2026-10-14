@@ -4,6 +4,10 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprot
 
 export interface Env {
   MCP_API_KEY: string;
+  OAUTH_KV?: KVNamespace;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
+  OAUTH_ALLOWED_GITHUB_LOGIN?: string;
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   DOCMOST_URL: string;
@@ -230,7 +234,7 @@ function json(data: any, status = 200): Response {
   });
 }
 
-export default {
+export const legacyWorker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -243,16 +247,23 @@ export default {
       return json({ success: false, error: "Unauthorized" }, 401);
     }
 
+    return fetchAuthorized(request, env);
+  },
+};
+
+export async function fetchAuthorized(request: Request, env: Env, readOnly = false): Promise<Response> {
+    const url = new URL(request.url);
     try {
       const origin = request.headers.get("Origin");
       if (origin && origin !== url.origin) return json({ error: "Origin not allowed" }, 403);
       if (url.pathname === "/mcp") {
-        const server = new Server({ name: "zagor-kate-mcp", version: "0.1.1" }, { capabilities: { tools: {} } });
+        const server = new Server({ name: "zagor-kate-mcp", version: "0.1.2" }, { capabilities: { tools: {} } });
         server.setRequestHandler(ListToolsRequestSchema, async () => ({
-          tools: TOOLS.filter(tool => tool.name !== "write_pmc" || env.ENABLE_PMC_WRITES === "true") as any,
+          tools: TOOLS.filter(tool => tool.name !== "write_pmc" || (!readOnly && env.ENABLE_PMC_WRITES === "true")) as any,
         }));
         server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
           try {
+            if (readOnly && params.name === "write_pmc") throw new Error("Read-only session");
             const result = await callTool(env, params.name, params.arguments || {});
             return { content: [{ type: "text", text: JSON.stringify(result) }] };
           } catch {
@@ -264,12 +275,13 @@ export default {
         return await transport.handleRequest(request);
       }
       if (url.pathname === "/mcp/tools/list" && request.method === "GET") {
-        return json({ tools: TOOLS });
+        return json({ tools: TOOLS.filter(tool => tool.name !== "write_pmc" || (!readOnly && env.ENABLE_PMC_WRITES === "true")) });
       }
 
       if (url.pathname === "/mcp/tools/call" && request.method === "POST") {
         const body = (await request.json()) as { name?: string; arguments?: any };
         if (!body.name) return json({ success: false, error: "Missing tool name" }, 400);
+        if (readOnly && body.name === "write_pmc") return json({ error: "Read-only session" }, 403);
         const result = await callTool(env, body.name, body.arguments || {});
         return json({ success: true, result });
       }
@@ -278,5 +290,17 @@ export default {
     } catch (e: any) {
       return json({ success: false, error: "Request failed. Check Worker configuration and source permissions." }, 500);
     }
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (path === "/health") return legacyWorker.fetch(request, env);
+    if (env.MCP_API_KEY && request.headers.get("Authorization") === `Bearer ${env.MCP_API_KEY}` && path.startsWith("/mcp")) {
+      return legacyWorker.fetch(request, env);
+    }
+    if (!env.OAUTH_KV) return legacyWorker.fetch(request, env);
+    const { oauthWorker } = await import("./oauth.ts");
+    return oauthWorker.fetch(request, env, ctx);
   },
 };

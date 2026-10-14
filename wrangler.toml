@@ -1,14 +1,23 @@
 name = "zagor-kate-mcp"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
 [vars]
 GITHUB_REPO = "noke28/zagor-duh-zime"
 ENABLE_PMC_WRITES = "false"
+OAUTH_ALLOWED_GITHUB_LOGIN = "noke28"
 
 # Secrets to configure in Cloudflare:
 # wrangler secret put MCP_API_KEY
 # wrangler secret put GITHUB_TOKEN
 # wrangler secret put DOCMOST_URL
 # wrangler secret put DOCMOST_API_KEY
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "8d45f6910d1941a2af4fa3dd619f2c62"
+
+# GitHub OAuth app credentials (separate from the source-read GITHUB_TOKEN):
+# wrangler secret put OAUTH_GITHUB_CLIENT_ID
+# wrangler secret put OAUTH_GITHUB_CLIENT_SECRET

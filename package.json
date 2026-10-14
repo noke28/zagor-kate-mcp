@@ -1,8 +1,8 @@
 {
   "name": "zagor-kate-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
-  "description": "ZAGOR KATE MCP server — canon access layer for Phase 3A bridge",
+  "description": "ZAGOR KATE MCP server \u2014 canon access layer for Phase 3A bridge",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -15,6 +15,7 @@
     "wrangler": "^4.42.0"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^4.6.5"
   },
