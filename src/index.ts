@@ -256,6 +256,10 @@ export async function fetchAuthorized(request: Request, env: Env, readOnly = fal
     try {
       const origin = request.headers.get("Origin");
       if (origin && origin !== url.origin) return json({ error: "Origin not allowed" }, 403);
+      if (url.pathname === "/mcp/source-status" && request.method === "GET") {
+        const source = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${AUTHORITY.root}?ref=main`, { headers: authHeaders(env) });
+        return json({ source: "GitHub", path: AUTHORITY.root, sourceHttpStatus: source.status, accessible: source.ok });
+      }
       if (url.pathname === "/mcp") {
         const server = new Server({ name: "zagor-kate-mcp", version: "0.1.2" }, { capabilities: { tools: {} } });
         server.setRequestHandler(ListToolsRequestSchema, async () => ({
