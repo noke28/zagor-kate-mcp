@@ -1,4 +1,6 @@
 name = "zagor-kate-mcp"
+account_id = "1f28e4844199700f401ee1f8c5ec2094"
+workers_dev = true
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
@@ -21,7 +23,7 @@ OAUTH_ALLOWED_GITHUB_LOGIN = "noke28"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-id = "8d45f6910d1941a2af4fa3dd619f2c62"
+id = "78b5372d9cfb47a3ac60bc9d829e19a2"
 
 # GitHub OAuth app credentials (separate from the source-read GITHUB_TOKEN):
 # wrangler secret put OAUTH_GITHUB_CLIENT_ID
