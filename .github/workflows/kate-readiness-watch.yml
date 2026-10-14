@@ -1,0 +1,61 @@
+name: KATE MCP readiness watch (review only)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: kate-mcp-readiness-watch
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      HEALTH_URL: https://zagor-kate-mcp.kenan-begicsa.workers.dev/health/deep
+      HEALTH_TOKEN: ${{ secrets.MCP_HEALTH_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Fail closed when monitoring credential is missing
+        shell: bash
+        run: |
+          if [ -z "$HEALTH_TOKEN" ]; then
+            echo "::error::MCP_HEALTH_KEY is not configured"
+            exit 1
+          fi
+          echo "::add-mask::$HEALTH_TOKEN"
+      - name: Check three times without deployment or rollback
+        id: probe
+        shell: bash
+        run: |
+          failures=0
+          for attempt in 1 2 3; do
+            status=$(curl --silent --show-error --output /dev/null --max-time 8 --write-out '%{http_code}' --header "Authorization: Bearer $HEALTH_TOKEN" "$HEALTH_URL") || status=000
+            if [ "$status" = 200 ]; then
+              failures=0
+              break
+            fi
+            if [ "$status" = 401 ] || [ "$status" = 403 ]; then
+              echo "::warning::Authorization failure; no remediation attempted"
+              echo "incident=auth" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            failures=$((failures+1))
+            if [ "$attempt" -lt 3 ]; then sleep 120; fi
+          done
+          if [ "$failures" -eq 3 ]; then
+            echo "incident=readiness" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create or reuse one incident issue
+        if: steps.probe.outputs.incident != ''
+        shell: bash
+        env:
+          INCIDENT: ${{ steps.probe.outputs.incident }}
+        run: |
+          title="[KATE MCP] Health incident: $INCIDENT"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json title,number --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ -z "$existing" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "Automated monitoring detected $INCIDENT. No deployment, rollback, canon write or credential change was attempted."
+          fi
