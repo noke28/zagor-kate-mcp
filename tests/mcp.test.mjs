@@ -16,7 +16,8 @@ test('MCP initialize and list tools; writes disabled by default', async () => {
   assert.equal(r.status, 200);
   assert.equal((await r.json()).result.serverInfo.name, 'zagor-kate-mcp');
   const list = await (await rpc('tools/list')).json();
-  assert.equal(list.result.tools.length, 7);
+  assert.equal(list.result.tools.length, 6);
+  assert.ok(!list.result.tools.some(t => t.name === 'get_docmost_page'));
   assert.ok(list.result.tools.some(t => t.name === 'get_root'));
   const denied = await (await rpc('tools/call', { name: 'write_pmc', arguments: { scope: 'system', decision: 'x', rationale: 'x' } })).json();
   assert.equal(denied.result.isError, true);
