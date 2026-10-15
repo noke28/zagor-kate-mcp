@@ -186,16 +186,9 @@ async function callTool(env: Env, name: string, args: any): Promise<any> {
     }
 
     case "get_docmost_page": {
-      const data = await docmostFetch(env, "/api/pages/info", {
-        method: "POST",
-        body: JSON.stringify({ pageId: args.page_id }),
-      });
-      const page = data.data || data.page || data;
-      return {
-        content: page?.content || page?.body || "",
-        title: page?.title || "",
-        page_id: page?.id || args.page_id,
-      };
+      // Deny access until an explicit page-level allowlist or ownership check is implemented.
+      // A single server credential does not establish the caller's authorization for a page.
+      throw new Error("Docmost page access is disabled pending page-level authorization");
     }
 
     case "write_pmc": {
