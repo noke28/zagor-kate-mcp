@@ -33,40 +33,51 @@ const tx = () => ({ state: 'bound-state', verifier: 'a'.repeat(43), clientId: 'c
 const validParams = new URLSearchParams({ code: 'one-use-code', state: 'bound-state', iss: 'https://zagor-kate-mcp.kenan-begicsa.workers.dev' });
 
 test('three read-only WebMCP tools register; unsupported browsers retain buttons', async () => {
-  const b = await browser(); assert.equal(b.definitions.length, 3);
+  const b = await browser();
+  assert.equal(b.definitions.length, 3);
   assert.ok(b.definitions.every(t => t.annotations.readOnlyHint));
   assert.equal((await b.definitions[0].execute({})).authenticatedToolsAvailable, false);
-  await assert.rejects(b.definitions[1].execute({}), /Poveži/);
+  await assert.rejects(b.definitions[1].execute({}), /bearer ključ/);
   await assert.rejects(b.definitions[0].execute({ extra: true }));
   const fallback = await browser({ supported: false });
   assert.match(fallback.element('webmcp').textContent, /dugmadi/);
 });
-test('PKCE login stores only transaction data and requests read scope', async () => {
-  const b = await browser(); await b.element('login').listeners.click();
-  const target = new URL(b.location.target, b.location.origin);
-  assert.equal(target.searchParams.get('code_challenge_method'), 'S256');
-  assert.equal(target.searchParams.get('scope'), 'mcp:read');
-  assert.equal(JSON.parse(b.requests[0].init.body).token_endpoint_auth_method, 'none');
-  assert.equal(JSON.parse(b.stored.get('zagor-hq-pkce')).verifier.length, 43);
+
+test('bearer login validates key in memory and authenticates tool listing', async () => {
+  const b = await browser();
+  b.element('bearer-key').value = 'test-secret';
+  await b.element('login').listeners.click();
+  assert.equal(b.element('bearer-key').value, '');
+  assert.equal(b.element('root').disabled, false);
+  assert.equal(b.requests.some(r => r.url === '/mcp' && r.init.headers.Authorization === 'Bearer test-secret'), true);
+  assert.equal(b.stored.size, 0);
+  assert.equal(b.requests.some(r => r.url === '/oauth/register' || r.url === '/oauth/token'), false);
 });
-test('state and issuer mismatches fail before token exchange', async () => {
-  for (const patch of [{ state: 'forged' }, { iss: 'https://evil.test' }]) {
-    const params = new URLSearchParams(validParams); for (const [key, value] of Object.entries(patch)) params.set(key, value);
-    const b = await browser({ params, transaction: tx() });
-    assert.equal(b.requests.length, 0); assert.equal(b.stored.size, 0); assert.equal(b.element('root').disabled, true);
-  }
+
+test('missing bearer key rejects login without exposing tools', async () => {
+  const b = await browser();
+  await b.element('login').listeners.click();
+  assert.match(b.element('connection').textContent, /bearer ključ/);
+  assert.equal(b.element('root').disabled, true);
+  assert.equal(b.requests.some(r => r.url === '/mcp'), false);
 });
+
 test('authorized ROOT and searches update visible state; logout clears source content', async () => {
-  const b = await browser({ params: validParams, transaction: tx() });
-  assert.equal(b.element('root').disabled, false); assert.equal(b.stored.size, 0);
+  const b = await browser();
+  b.element('bearer-key').value = 'test-secret';
+  await b.element('login').listeners.click();
+  assert.equal(b.element('root').disabled, false);
   const result = await b.definitions[1].execute({});
-  assert.equal(b.element('root-content').textContent, result.content); // Never HTML.
+  assert.equal(b.element('root-content').textContent, result.content);
   await assert.rejects(b.definitions[2].execute({ query: 'x', extra: 'x' }));
   b.setResult({ matches: [{ path: 'authority/SOURCE_CURRENT.md', url: 'https://github.com/noke28/zagor-duh-zime/blob/main/authority/SOURCE_CURRENT.md' }] });
-  await b.definitions[2].execute({ query: 'Zagor' }); assert.equal(b.element('matches').children.length, 1);
+  await b.definitions[2].execute({ query: 'Zagor' });
+  assert.equal(b.element('matches').children.length, 1);
   b.setResult({ matches: [{ path: 'authority/x', url: 'https://evil.test/x' }] });
   await assert.rejects(b.definitions[2].execute({ query: 'Zagor' }), /Porijeklo/);
-  b.element('logout').listeners.click(); assert.equal(b.element('root-content').textContent, '');
-  await assert.rejects(b.definitions[1].execute({}), /Poveži/);
-  b.window.listeners.pagehide(); assert.ok(b.definitions.every(t => t.signal.aborted));
+  b.element('logout').listeners.click();
+  assert.equal(b.element('root-content').textContent, '');
+  await assert.rejects(b.definitions[1].execute({}), /bearer ključ/);
+  b.window.listeners.pagehide();
+  assert.ok(b.definitions.every(t => t.signal.aborted));
 });
