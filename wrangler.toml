@@ -18,8 +18,6 @@ OAUTH_ALLOWED_GITHUB_LOGIN = "noke28"
 # Secrets to configure in Cloudflare:
 # wrangler secret put MCP_API_KEY
 # wrangler secret put GITHUB_TOKEN
-# wrangler secret put DOCMOST_URL
-# wrangler secret put DOCMOST_API_KEY
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
