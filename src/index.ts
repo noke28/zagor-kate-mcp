@@ -1,3 +1,4 @@
+import { deepHealth } from "./health.ts";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -304,6 +305,7 @@ export default {
       return hqResponse(request)!;
     }
     if (path === "/health") return legacyWorker.fetch(request, env);
+    if (path === "/health/deep" && request.method === "GET") return deepHealth(request, env, () => callTool(env, "get_root", {}), TOOLS.map(tool => tool.name));
     if (env.MCP_API_KEY && request.headers.get("Authorization") === `Bearer ${env.MCP_API_KEY}` && path.startsWith("/mcp")) {
       return fetchAuthorized(request, env, true);
     }
