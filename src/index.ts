@@ -10,8 +10,6 @@ export interface Env {
   OAUTH_ALLOWED_GITHUB_LOGIN?: string;
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
-  DOCMOST_URL: string;
-  DOCMOST_API_KEY: string;
   ENABLE_PMC_WRITES?: string;
 }
 
@@ -78,15 +76,6 @@ const TOOLS = [
       required: ["scope", "decision", "rationale"],
     },
   },
-  {
-    name: "get_docmost_page",
-    description: "Read a Docmost page by page ID.",
-    inputSchema: {
-      type: "object",
-      properties: { page_id: { type: "string" } },
-      required: ["page_id"],
-    },
-  },
 ] as const;
 
 function authHeaders(env: Env): HeadersInit {
@@ -118,19 +107,6 @@ async function ghFileContent(env: Env, path: string): Promise<string> {
   const data = await ghFetch(env, `contents/${path}?ref=main`);
   if (!data?.content) throw new Error(`Missing file content: ${path}`);
   return decodeBase64Utf8(data.content);
-}
-
-async function docmostFetch(env: Env, path: string, init: RequestInit = {}): Promise<any> {
-  const r = await fetch(`${env.DOCMOST_URL.replace(/\/$/, "")}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${env.DOCMOST_API_KEY}`,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-  if (!r.ok) throw new Error(`Docmost ${path}: ${r.status} ${await r.text()}`);
-  return r.json();
 }
 
 async function searchCode(env: Env, query: string): Promise<any[]> {
@@ -183,19 +159,6 @@ async function callTool(env: Env, name: string, args: any): Promise<any> {
       if (!/^[a-z0-9-]+$/.test(safe)) throw new Error("Invalid procedure name");
       const path = `kate/procedures/${safe}.md`;
       return { path, content: await ghFileContent(env, path) };
-    }
-
-    case "get_docmost_page": {
-      const data = await docmostFetch(env, "/api/pages/info", {
-        method: "POST",
-        body: JSON.stringify({ pageId: args.page_id }),
-      });
-      const page = data.data || data.page || data;
-      return {
-        content: page?.content || page?.body || "",
-        title: page?.title || "",
-        page_id: page?.id || args.page_id,
-      };
     }
 
     case "write_pmc": {
